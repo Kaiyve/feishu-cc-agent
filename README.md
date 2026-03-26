@@ -6,6 +6,16 @@
 
 [English](#english) | 中文
 
+## 🔥 为什么用这个？
+
+**1. Agent 有记忆，不是一次性对话**
+
+普通 Bot 每次对话都从零开始。feishu-cc-agent 的 Agent 有完整的记忆系统——它记得你的偏好、之前聊过的内容、你关心的项目。你说"上次那个 bug 修好了吗"，它知道你在说什么。
+
+**2. 手机上操控本地 Mac 的 Claude Code**
+
+在地铁上、在床上、在任何地方，打开飞书发一句"帮我把登录页的样式改一下"，你 Mac 上的 Claude Code 就开始干活了。干完自动把结果推回飞书。更强的是，你可以说"继续昨天改前端的那个任务"——它能找到历史会话，接着干。
+
 ## ✨ 特性
 
 - **飞书原生** — WebSocket 长连接，支持群聊和私聊
@@ -146,7 +156,7 @@ MIT
 
 - [Claude Code](https://claude.ai/download) — Anthropic
 - [@larksuiteoapi/node-sdk](https://github.com/larksuite/oapi-sdk-nodejs) — Feishu SDK
-- [cc-connect](https://github.com/chenhg5/cc-connect) — Inspiration
+- [OpenClaw](https://github.com/openclaw/openclaw) — Memory architecture inspiration
 
 ---
 
@@ -157,6 +167,16 @@ MIT
 The most powerful general-purpose Agent, right on your phone via Feishu
 
 > Send a message on Feishu, AI Agent understands your intent, answers simple questions directly, and automatically delegates complex tasks to Claude Code running on your local Mac.
+
+## 🔥 Why This?
+
+**1. Agent with Memory — Not a Disposable Chat**
+
+Normal bots start from scratch every time. feishu-cc-agent has a full memory system — it remembers your preferences, past conversations, and projects you care about. Say "is that bug from last time fixed?" and it knows exactly what you're talking about.
+
+**2. Control Your Local Mac's Claude Code from Your Phone**
+
+On the subway, in bed, anywhere — open Feishu and say "fix the login page styles". Claude Code on your Mac starts working immediately and pushes the result back to Feishu when done. Even better, you can say "continue the frontend task from yesterday" — it finds the historical session and picks up where it left off.
 
 ## ✨ Features
 
@@ -298,4 +318,4 @@ MIT
 
 - [Claude Code](https://claude.ai/download) — Anthropic
 - [@larksuiteoapi/node-sdk](https://github.com/larksuite/oapi-sdk-nodejs) — Feishu SDK
-- [cc-connect](https://github.com/chenhg5/cc-connect) — Inspiration
+- [OpenClaw](https://github.com/openclaw/openclaw) — Memory architecture inspiration
