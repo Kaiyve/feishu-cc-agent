@@ -1,21 +1,13 @@
 /**
- * Claude Code Channel Bridge — 本地 Claude Code 双向通信
+ * Claude Code Bridge — spawn claude -p for each task
  *
- * 启动 Claude Code 子进程（带 Channel MCP），通过任务队列通信。
+ * Tasks are persisted to SQLite so they survive process restarts.
+ * Each task spawns a fresh `claude -p --bare` process.
  */
 
-import { spawn, type ChildProcess } from 'child_process';
-import { resolve } from 'path';
+import { spawn } from 'child_process';
 import type { Config } from '../config.js';
 import chalk from 'chalk';
-
-interface PendingTask {
-  id: number;
-  prompt: string;
-  chatId: string;
-  senderOpenId: string;
-  resolve: (result: string) => void;
-}
 
 let bridge: ChannelBridge | null = null;
 
@@ -23,61 +15,131 @@ export function getChannelBridge(): ChannelBridge | null {
   return bridge;
 }
 
+// ═══ Task Persistence (SQLite) ═══
+
+let taskDb: any = null;
+
+function initTaskDb() {
+  try {
+    const Database = require('better-sqlite3');
+    const { resolve } = require('path');
+    const { homedir } = require('os');
+    const dbPath = resolve(homedir(), '.feishu-cc-agent', 'memory.db');
+    taskDb = new Database(dbPath);
+    taskDb.exec(`
+      CREATE TABLE IF NOT EXISTS cc_tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        prompt TEXT NOT NULL,
+        chat_id TEXT NOT NULL,
+        sender_open_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        result TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    // Recover any tasks that were running when process died
+    taskDb.prepare(`UPDATE cc_tasks SET status = 'pending' WHERE status = 'running'`).run();
+  } catch {
+    taskDb = null;
+  }
+}
+
+function persistTask(prompt: string, chatId: string, senderOpenId: string): number {
+  if (!taskDb) return 0;
+  const result = taskDb.prepare(
+    `INSERT INTO cc_tasks (prompt, chat_id, sender_open_id, status) VALUES (?, ?, ?, 'pending')`
+  ).run(prompt, chatId, senderOpenId);
+  return result.lastInsertRowid as number;
+}
+
+function updateTaskStatus(id: number, status: string, result?: string) {
+  if (!taskDb || !id) return;
+  taskDb.prepare(
+    `UPDATE cc_tasks SET status = ?, result = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+  ).run(status, result?.slice(0, 5000) ?? null, id);
+}
+
+function getPendingTasks(): Array<{ id: number; prompt: string; chat_id: string; sender_open_id: string }> {
+  if (!taskDb) return [];
+  return taskDb.prepare(`SELECT id, prompt, chat_id, sender_open_id FROM cc_tasks WHERE status = 'pending' ORDER BY id ASC`).all();
+}
+
+// ═══ Bridge ═══
+
+interface ActiveTask {
+  dbId: number;
+  prompt: string;
+  chatId: string;
+  senderOpenId: string;
+}
+
 export class ChannelBridge {
-  private ccProcess: ChildProcess | null = null;
-  private taskQueue: PendingTask[] = [];
-  private activeTask: PendingTask | null = null;
-  private taskIdCounter = 0;
+  private activeTask: ActiveTask | null = null;
+  private processing = false;
   private config: Config;
   private workDir: string;
 
   constructor(config: Config, workDir: string) {
     this.config = config;
     this.workDir = workDir;
+    initTaskDb();
+
+    // Process any recovered pending tasks
+    const pending = getPendingTasks();
+    if (pending.length > 0) {
+      console.log(chalk.yellow(`  📋 Recovered ${pending.length} pending CC task(s) from last session`));
+      this.processNext();
+    }
   }
 
   async submitTask(prompt: string, chatId: string, senderOpenId: string): Promise<any> {
-    const id = ++this.taskIdCounter;
-    console.log(chalk.yellow(`  📋 CC 任务 #${id}: ${prompt.slice(0, 60)}...`));
+    const dbId = persistTask(prompt, chatId, senderOpenId);
+    console.log(chalk.yellow(`  📋 CC task #${dbId}: ${prompt.slice(0, 60)}...`));
 
-    // 异步模式：立即返回，结果通过飞书推送
-    this.taskQueue.push({
-      id,
-      prompt,
-      chatId,
-      senderOpenId,
-      resolve: () => {},
-    });
-
-    // 触发处理
     this.processNext();
 
     return {
       submitted: true,
-      taskId: id,
-      message: `任务 #${id} 已提交给 Claude Code，预计 1-5 分钟完成。`,
+      taskId: dbId,
+      message: `Task #${dbId} submitted to Claude Code. Estimated 1-5 minutes.`,
     };
   }
 
   private async processNext() {
-    if (this.activeTask || this.taskQueue.length === 0) return;
+    if (this.processing) return;
 
-    this.activeTask = this.taskQueue.shift()!;
-    const task = this.activeTask;
+    const pending = getPendingTasks();
+    if (pending.length === 0) return;
+
+    this.processing = true;
+    const task = pending[0];
+    this.activeTask = {
+      dbId: task.id,
+      prompt: task.prompt,
+      chatId: task.chat_id,
+      senderOpenId: task.sender_open_id,
+    };
+
+    updateTaskStatus(task.id, 'running');
 
     try {
-      console.log(chalk.yellow(`  🚀 执行 CC 任务 #${task.id}`));
+      console.log(chalk.yellow(`  🚀 Running CC task #${task.id}`));
       const result = await this.executeClaudeCode(task.prompt);
-      console.log(chalk.green(`  ✅ CC 任务 #${task.id} 完成 (${result.length} 字)`));
+      console.log(chalk.green(`  ✅ CC task #${task.id} done (${result.length} chars)`));
 
-      // 通过飞书推送结果到来源聊天
-      await this.notifyResult(task, result, 'done');
+      updateTaskStatus(task.id, 'done', result);
+      await this.notifyResult(this.activeTask, result, 'done');
     } catch (err: any) {
-      console.error(chalk.red(`  ❌ CC 任务 #${task.id} 失败: ${err.message}`));
-      await this.notifyResult(task, err.message, 'failed');
+      console.error(chalk.red(`  ❌ CC task #${task.id} failed: ${err.message}`));
+      updateTaskStatus(task.id, 'failed', err.message);
+      await this.notifyResult(this.activeTask, err.message, 'failed');
     } finally {
       this.activeTask = null;
-      this.processNext();
+      this.processing = false;
+      // Process next task in queue
+      const remaining = getPendingTasks();
+      if (remaining.length > 0) this.processNext();
     }
   }
 
@@ -110,8 +172,12 @@ export class ChannelBridge {
 
       child.on('close', (code) => {
         clearTimeout(timer);
-        if (code === 0 || output) {
+        // Fix #2: Only exit code 0 is success. Non-zero = failure even with output.
+        if (code === 0) {
           resolve(output || '(empty output)');
+        } else if (output && code !== null) {
+          // Non-zero exit with output: report as failure but include the output
+          reject(new Error(`Claude Code exited with code ${code}.\n\nPartial output:\n${output.slice(-1000)}`));
         } else {
           reject(new Error(stderr.slice(-500) || `exit code ${code}`));
         }
@@ -124,7 +190,7 @@ export class ChannelBridge {
     });
   }
 
-  private async notifyResult(task: PendingTask, content: string, status: 'done' | 'failed') {
+  private async notifyResult(task: ActiveTask, content: string, status: 'done' | 'failed') {
     try {
       const Lark = await import('@larksuiteoapi/node-sdk');
       const client = new Lark.Client({
@@ -133,7 +199,7 @@ export class ChannelBridge {
         domain: Lark.Domain.Feishu,
       });
 
-      const title = status === 'done' ? '✅ Claude Code 完成' : '❌ Claude Code 失败';
+      const title = status === 'done' ? '✅ Claude Code Done' : '❌ Claude Code Failed';
       const template = status === 'done' ? 'green' : 'red';
       const text = content.slice(0, 3000);
 
@@ -150,7 +216,7 @@ export class ChannelBridge {
         },
       });
     } catch (err: any) {
-      console.error(chalk.red('飞书通知失败:'), err.message);
+      console.error(chalk.red('Feishu notification failed:'), err.message);
     }
   }
 }

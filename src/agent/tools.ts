@@ -60,20 +60,26 @@ const TOOL_REGISTRY: Record<string, ToolEntry> = {
   memory_save: {
     definition: {
       name: 'memory_save',
-      description: '保存一条记忆',
+      description: 'Save a memory. Admins can set scope to "global" to share with all users.',
       input_schema: {
         type: 'object',
         properties: {
           key: { type: 'string' },
           content: { type: 'string' },
           type: { type: 'string', enum: ['fact', 'preference', 'insight'] },
+          scope: { type: 'string', enum: ['user', 'global'], description: 'global requires admin' },
         },
         required: ['key', 'content', 'type'],
       },
     },
     handler: async (input, ctx) => {
-      saveMemory(input.key, input.content, input.type, ctx.senderOpenId);
-      return { saved: true };
+      const wantGlobal = input.scope === 'global';
+      if (wantGlobal && !ctx.isAdmin) {
+        return { error: 'Only admins can write global memories' };
+      }
+      const ownerId = wantGlobal ? 'global' : ctx.senderOpenId;
+      saveMemory(input.key, input.content, input.type, ownerId);
+      return { saved: true, scope: wantGlobal ? 'global' : 'user' };
     },
   },
 

@@ -14,7 +14,7 @@
 
 **2. 手机上操控本地 Mac 的 Claude Code**
 
-在地铁上、在床上、在任何地方，打开飞书发一句"帮我把登录页的样式改一下"，你 Mac 上的 Claude Code 就开始干活了。干完自动把结果推回飞书。更强的是，你可以说"继续昨天改前端的那个任务"——它能找到历史会话，接着干。
+在地铁上、在床上、在任何地方，打开飞书发一句"帮我把登录页的样式改一下"，你 Mac 上的 Claude Code 就开始干活了。干完自动把结果推回飞书。任务队列持久化在 SQLite 中，进程重启后自动恢复未完成的任务。
 
 ## ✨ 特性
 
@@ -66,7 +66,7 @@ feishu-cc-agent start
 |-------|-----------|
 | "帮我解释一下 React hooks" | Agent 直接回答 |
 | "帮我改一下项目的登录页面" | 委派给 Claude Code 执行 |
-| "继续上次修改前端的任务" | Claude Code 搜索历史会话并继续 |
+| "帮我跑一下项目的测试" | 委派给 Claude Code 执行 |
 | "记住我喜欢用 TypeScript" | 保存到本地记忆 |
 
 ## 🤖 支持的 AI 提供商
@@ -115,8 +115,7 @@ feishu-cc-agent start
   },
   "claudeCode": {
     "enabled": true,
-    "skipPermissions": true,
-    "resumeSession": true
+    "skipPermissions": true
   }
 }
 ```
@@ -176,7 +175,7 @@ Normal bots start from scratch every time. feishu-cc-agent has a full memory sys
 
 **2. Control Your Local Mac's Claude Code from Your Phone**
 
-On the subway, in bed, anywhere — open Feishu and say "fix the login page styles". Claude Code on your Mac starts working immediately and pushes the result back to Feishu when done. Even better, you can say "continue the frontend task from yesterday" — it finds the historical session and picks up where it left off.
+On the subway, in bed, anywhere — open Feishu and say "fix the login page styles". Claude Code on your Mac starts working immediately and pushes the result back to Feishu when done. The task queue is persisted to SQLite, so pending tasks survive process restarts.
 
 ## ✨ Features
 
@@ -228,7 +227,7 @@ That's it! Go send a message to your bot on Feishu.
 |---------|-----------|
 | "Explain React hooks to me" | Agent answers directly |
 | "Help me fix the login page" | Delegates to Claude Code |
-| "Continue the frontend task from last time" | Claude Code searches history and resumes |
+| "Run the project tests for me" | Delegates to Claude Code |
 | "Remember that I prefer TypeScript" | Saves to local memory |
 
 ## 🤖 Supported AI Providers
@@ -277,8 +276,7 @@ Config is stored at `~/.feishu-cc-agent/config.json`:
   },
   "claudeCode": {
     "enabled": true,
-    "skipPermissions": true,
-    "resumeSession": true
+    "skipPermissions": true
   }
 }
 ```

@@ -14,8 +14,10 @@ You are receiving tasks from users via the Feishu Channel.
 - To search historical sessions: `grep -rl "keyword" ~/.claude/projects/`
 - **Always reply in the same language the user used in their request**
 
-## Session Switching
-If the user asks to "continue a previous conversation", you can:
-1. Search historical session files
-2. Read .jsonl files for context
-3. Continue the work in the current session
+## Finding Prior Context
+If the user references previous work, you can search for it:
+1. `grep -rl "keyword" ~/.claude/projects/` to find relevant session files
+2. Read the `.jsonl` files to understand what was done before
+3. Use that context to inform your current task
+
+Note: Each task runs as a fresh `claude -p` process. There is no automatic session continuity.

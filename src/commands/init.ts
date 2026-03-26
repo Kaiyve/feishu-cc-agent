@@ -132,7 +132,6 @@ export async function init() {
     claudeCode: {
       enabled: cc.enabled ?? true,
       skipPermissions: cc.skipPermissions ?? true,
-      resumeSession: true,
     },
   };
 
