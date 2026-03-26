@@ -1,108 +1,76 @@
+<div align="right">
+  <a href="#english">English</a> | 中文
+</div>
+
 # feishu-cc-agent
 
-手机飞书，用上最强通用 Agent
+手机飞书，用上最强通用 Agent。
 
-> 在飞书上发消息，AI Agent 理解你的意图，简单问题直接回答，复杂任务自动交给本地 Mac 上的 Claude Code 执行。
+飞书原本能发消息，但缺少 AI 推理和本地执行能力。这个项目补上的是：**智能 Agent 路由 + 本地 Claude Code 执行 + 跨会话记忆**。
 
-[English](#english) | 中文
+---
 
-## 🔥 为什么用这个？
+## 能力
 
-**1. Agent 有记忆，不是一次性对话**
+| 能力 | 说明 |
+|------|------|
+| 智能路由 | 简单问题 Agent 直答，复杂任务自动委派 Claude Code |
+| 本地执行 | 飞书发消息 → Mac 上的 Claude Code 干活 → 结果推回飞书 |
+| 跨会话记忆 | FTS5 全文搜索 + 自动提取事实 + 历史对话压缩，不是一次性聊天 |
+| 任意 AI 提供商 | 智谱 / DeepSeek / OpenRouter / Ollama / OpenAI，自动适配 tool calling 差异 |
+| 任务持久化 | Claude Code 任务队列存 SQLite，进程重启自动恢复 |
+| 权限分级 | 管理员可执行 Claude Code、写全局记忆；普通用户仅对话 |
 
-普通 Bot 每次对话都从零开始。feishu-cc-agent 的 Agent 有完整的记忆系统——它记得你的偏好、之前聊过的内容、你关心的项目。你说"上次那个 bug 修好了吗"，它知道你在说什么。
+## 安装
 
-**2. 手机上操控本地 Mac 的 Claude Code**
-
-在地铁上、在床上、在任何地方，打开飞书发一句"帮我把登录页的样式改一下"，你 Mac 上的 Claude Code 就开始干活了。干完自动把结果推回飞书。任务队列持久化在 SQLite 中，进程重启后自动恢复未完成的任务。
-
-## ✨ 特性
-
-- **飞书原生** — WebSocket 长连接，支持群聊和私聊
-- **智能 Agent** — 不是简单转发，能理解意图、智能路由
-- **Claude Code 集成** — 复杂任务自动委派到本地 Mac 执行
-- **任意 AI 提供商** — 支持智谱、DeepSeek、OpenRouter、LiteLLM 等
-- **本地记忆** — SQLite 存储，零服务器、零配置
-- **自动部署 Skills** — 安装时自动配置 Claude Code 技能
-
-## 🚀 快速开始
-
-### 前提
-
-- Node.js ≥ 20
-- [Claude Code](https://claude.ai/download) 已安装（如需本地执行功能）
-- 飞书开放平台应用（[创建指南](#-飞书应用配置)）
-- 任意 OpenAI 兼容 AI API Key
-
-### 安装
+**前提**：Node.js ≥ 20，[Claude Code](https://claude.ai/download) 已安装，飞书开放平台应用（[配置指南](#飞书应用配置)）
 
 ```bash
 npm install -g feishu-cc-agent
 ```
 
-### 配置
+## 配置 → 启动
 
 ```bash
-feishu-cc-agent init
+feishu-cc-agent init    # 交互式向导：飞书 App → AI API → Claude Code → 管理员
+feishu-cc-agent start   # 启动，去飞书发消息试试
 ```
 
-交互式向导会引导你配置：
-1. 📱 飞书 App ID / Secret
-2. 🧠 AI API（从预设列表选择或自定义）
-3. 💻 Claude Code（是否启用本地执行）
-4. 🔐 管理员 open_id
+## 使用
 
-### 启动
+安装后直接在飞书给机器人发消息，Agent 自动判断怎么处理：
 
-```bash
-feishu-cc-agent start
-```
+- "帮我解释一下 React hooks" → Agent 直接回答
+- "帮我改一下登录页的样式" → 委派给 Claude Code
+- "记住我喜欢用 TypeScript" → 保存到本地记忆
+- "帮我跑一下测试" → Claude Code 执行，结果推回飞书
 
-就这样！去飞书给你的机器人发消息试试。
-
-## 💬 使用示例
-
-| 你说的 | Agent 做的 |
-|-------|-----------|
-| "帮我解释一下 React hooks" | Agent 直接回答 |
-| "帮我改一下项目的登录页面" | 委派给 Claude Code 执行 |
-| "帮我跑一下项目的测试" | 委派给 Claude Code 执行 |
-| "记住我喜欢用 TypeScript" | 保存到本地记忆 |
-
-## 🤖 支持的 AI 提供商
+## AI 提供商
 
 | 提供商 | Base URL | 推荐模型 |
 |-------|----------|---------|
 | 智谱 | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-plus` |
 | DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
 | OpenRouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4` |
-| LiteLLM | 自定义 | 自定义 |
 | OpenAI | `https://api.openai.com/v1` | `gpt-4o` |
 
-只要是 OpenAI 兼容的 `/chat/completions` 端点都支持。
+任何 OpenAI 兼容端点都支持。不支持 tool calling 的模型会自动降级为文本模式。
 
-## 📱 飞书应用配置
+## 飞书应用配置
 
-1. 登录 [飞书开放平台](https://open.feishu.cn)
-2. 创建企业自建应用
-3. 添加**机器人**能力
-4. 权限管理 → 开启:
-   - `im:message`（获取与发送消息）
-   - `im:message:send_as_bot`（以应用身份发消息）
-5. 事件与回调 → 订阅方式: **使用长连接接收事件**
-6. 添加事件: `im.message.receive_v1`
-7. 版本管理 → 创建版本 → 发布
+1. [飞书开放平台](https://open.feishu.cn) → 创建企业自建应用 → 添加**机器人**能力
+2. 权限：`im:message` + `im:message:send_as_bot`
+3. 事件订阅：**长连接模式** + `im.message.receive_v1`
+4. 发布版本
 
-## ⚙️ 配置文件
+<details>
+<summary>配置文件参考</summary>
 
-配置保存在 `~/.feishu-cc-agent/config.json`：
+`~/.feishu-cc-agent/config.json`：
 
 ```json
 {
-  "feishu": {
-    "appId": "cli_xxx",
-    "appSecret": "xxx"
-  },
+  "feishu": { "appId": "cli_xxx", "appSecret": "xxx" },
   "agent": {
     "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
     "apiKey": "xxx",
@@ -110,160 +78,133 @@ feishu-cc-agent start
     "maxTurns": 10,
     "timeoutMs": 120000
   },
-  "permissions": {
-    "adminOpenIds": ["ou_xxx"]
-  },
-  "claudeCode": {
-    "enabled": true,
-    "skipPermissions": true
-  }
+  "permissions": { "adminOpenIds": ["ou_xxx"] },
+  "claudeCode": { "enabled": true, "skipPermissions": true }
 }
 ```
 
-## 🏗️ 架构
+</details>
+
+<details>
+<summary>架构</summary>
 
 ```
 ┌────────────────────────────────────────────────┐
 │            feishu-cc-agent (Local Mac)          │
 │                                                │
-│  📱 Feishu WebSocket ← @larksuiteoapi/node-sdk │
+│  📱 飞书 WebSocket ← @larksuiteoapi/node-sdk   │
 │       ↓                                        │
-│  🧠 Agent (Any OpenAI-compatible API)          │
-│       ↓ Smart routing                          │
-│  ┌─ Simple questions → Agent answers directly  │
-│  └─ Complex tasks → Claude Code (local exec)   │
+│  🧠 Agent (任意 OpenAI 兼容 API)                │
+│       ↓ 智能路由                                │
+│  ┌─ 简单问题 → Agent 直接回答                   │
+│  └─ 复杂任务 → Claude Code (本地执行)           │
 │                                                │
-│  💾 SQLite Memory (local file, zero config)    │
-│  📦 Auto-deployed Skills                       │
+│  💾 SQLite (记忆 + 任务队列，零配置)             │
 └────────────────────────────────────────────────┘
 ```
 
-## 🔧 开发
+</details>
+
+## 开发
 
 ```bash
 git clone https://github.com/Kaiyve/feishu-cc-agent.git
-cd feishu-cc-agent
-npm install
+cd feishu-cc-agent && npm install
 npm run dev -- start
 ```
 
-## 📄 License
+## 设计哲学
+
+> Agent 不是转发器。它有记忆、有判断、知道什么自己能做、什么该交给 Claude Code。
+> 记忆不靠用户手动保存——每轮对话自动提取事实，老对话自动压缩成摘要，搜索用 FTS5 不用 LIKE。
+
+## License
 
 MIT
 
-## 🙏 致谢
+## 致谢
 
 - [Claude Code](https://claude.ai/download) — Anthropic
-- [@larksuiteoapi/node-sdk](https://github.com/larksuite/oapi-sdk-nodejs) — Feishu SDK
-- [OpenClaw](https://github.com/openclaw/openclaw) — Memory architecture inspiration
+- [@larksuiteoapi/node-sdk](https://github.com/larksuite/oapi-sdk-nodejs) — 飞书 SDK
+- [OpenClaw](https://github.com/openclaw/openclaw) — 记忆架构 & API 兼容性参考
 
 ---
 
 <a id="english"></a>
 
+<div align="right">
+  <a href="#feishu-cc-agent">中文</a> | English
+</div>
+
 # feishu-cc-agent
 
-The most powerful general-purpose Agent, right on your phone via Feishu
+The most powerful general-purpose Agent, on your phone via Feishu.
 
-> Send a message on Feishu, AI Agent understands your intent, answers simple questions directly, and automatically delegates complex tasks to Claude Code running on your local Mac.
+Feishu can send messages, but lacks AI reasoning and local execution. This project adds: **smart Agent routing + local Claude Code execution + cross-session memory**.
 
-## 🔥 Why This?
+---
 
-**1. Agent with Memory — Not a Disposable Chat**
+## Capabilities
 
-Normal bots start from scratch every time. feishu-cc-agent has a full memory system — it remembers your preferences, past conversations, and projects you care about. Say "is that bug from last time fixed?" and it knows exactly what you're talking about.
+| Capability | Description |
+|-----------|-------------|
+| Smart Routing | Simple questions answered by Agent, complex tasks auto-delegated to Claude Code |
+| Local Execution | Send message on Feishu → Claude Code works on your Mac → result pushed back |
+| Cross-session Memory | FTS5 full-text search + auto fact extraction + conversation compression |
+| Any AI Provider | ZhiPu / DeepSeek / OpenRouter / Ollama / OpenAI, auto-adapts tool calling differences |
+| Task Persistence | Claude Code task queue in SQLite, auto-recovers on restart |
+| Permission Control | Admins can run Claude Code + write global memories; regular users chat only |
 
-**2. Control Your Local Mac's Claude Code from Your Phone**
+## Install
 
-On the subway, in bed, anywhere — open Feishu and say "fix the login page styles". Claude Code on your Mac starts working immediately and pushes the result back to Feishu when done. The task queue is persisted to SQLite, so pending tasks survive process restarts.
-
-## ✨ Features
-
-- **Feishu Native** — WebSocket long connection, supports group and private chats
-- **Smart Agent** — Not a simple forwarder; understands intent and routes intelligently
-- **Claude Code Integration** — Complex tasks auto-delegated to your local Mac
-- **Any AI Provider** — Supports ZhiPu, DeepSeek, OpenRouter, LiteLLM, and more
-- **Local Memory** — SQLite storage, zero servers, zero configuration
-- **Auto-deploy Skills** — Automatically configures Claude Code skills on install
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Node.js ≥ 20
-- [Claude Code](https://claude.ai/download) installed (for local execution)
-- A Feishu Open Platform app ([Setup Guide](#-feishu-app-setup))
-- Any OpenAI-compatible AI API Key
-
-### Install
+**Prerequisites**: Node.js ≥ 20, [Claude Code](https://claude.ai/download) installed, Feishu app ([Setup Guide](#feishu-app-setup))
 
 ```bash
 npm install -g feishu-cc-agent
 ```
 
-### Configure
+## Configure → Start
 
 ```bash
-feishu-cc-agent init
+feishu-cc-agent init    # Interactive wizard: Feishu App → AI API → Claude Code → Admin
+feishu-cc-agent start   # Start, then message your bot on Feishu
 ```
 
-The interactive wizard will guide you through:
-1. 📱 Feishu App ID / Secret
-2. 🧠 AI API (choose from presets or custom)
-3. 💻 Claude Code (enable local execution or not)
-4. 🔐 Admin open_id
+## Usage
 
-### Start
+Just message your bot on Feishu. The Agent decides how to handle it:
 
-```bash
-feishu-cc-agent start
-```
+- "Explain React hooks" → Agent answers directly
+- "Fix the login page styles" → Delegates to Claude Code
+- "Remember I prefer TypeScript" → Saves to local memory
+- "Run the tests" → Claude Code executes, result pushed back to Feishu
 
-That's it! Go send a message to your bot on Feishu.
-
-## 💬 Usage Examples
-
-| You say | Agent does |
-|---------|-----------|
-| "Explain React hooks to me" | Agent answers directly |
-| "Help me fix the login page" | Delegates to Claude Code |
-| "Run the project tests for me" | Delegates to Claude Code |
-| "Remember that I prefer TypeScript" | Saves to local memory |
-
-## 🤖 Supported AI Providers
+## AI Providers
 
 | Provider | Base URL | Recommended Model |
 |----------|----------|-------------------|
 | ZhiPu | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-plus` |
 | DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
 | OpenRouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4` |
-| LiteLLM | Custom | Custom |
 | OpenAI | `https://api.openai.com/v1` | `gpt-4o` |
 
-Any OpenAI-compatible `/chat/completions` endpoint is supported.
+Any OpenAI-compatible endpoint works. Models without tool calling auto-fallback to text mode.
 
-## 📱 Feishu App Setup
+## Feishu App Setup
 
-1. Log in to [Feishu Open Platform](https://open.feishu.cn)
-2. Create an internal enterprise app
-3. Add **Bot** capability
-4. Permissions → Enable:
-   - `im:message` (read & send messages)
-   - `im:message:send_as_bot` (send messages as bot)
-5. Events & Callbacks → Subscription method: **Long connection**
-6. Add event: `im.message.receive_v1`
-7. Version Management → Create version → Publish
+1. [Feishu Open Platform](https://open.feishu.cn) → Create internal app → Add **Bot** capability
+2. Permissions: `im:message` + `im:message:send_as_bot`
+3. Events: **Long connection** + `im.message.receive_v1`
+4. Publish a version
 
-## ⚙️ Configuration
+<details>
+<summary>Config reference</summary>
 
-Config is stored at `~/.feishu-cc-agent/config.json`:
+`~/.feishu-cc-agent/config.json`:
 
 ```json
 {
-  "feishu": {
-    "appId": "cli_xxx",
-    "appSecret": "xxx"
-  },
+  "feishu": { "appId": "cli_xxx", "appSecret": "xxx" },
   "agent": {
     "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
     "apiKey": "xxx",
@@ -271,17 +212,15 @@ Config is stored at `~/.feishu-cc-agent/config.json`:
     "maxTurns": 10,
     "timeoutMs": 120000
   },
-  "permissions": {
-    "adminOpenIds": ["ou_xxx"]
-  },
-  "claudeCode": {
-    "enabled": true,
-    "skipPermissions": true
-  }
+  "permissions": { "adminOpenIds": ["ou_xxx"] },
+  "claudeCode": { "enabled": true, "skipPermissions": true }
 }
 ```
 
-## 🏗️ Architecture
+</details>
+
+<details>
+<summary>Architecture</summary>
 
 ```
 ┌────────────────────────────────────────────────┐
@@ -294,26 +233,31 @@ Config is stored at `~/.feishu-cc-agent/config.json`:
 │  ┌─ Simple questions → Agent answers directly  │
 │  └─ Complex tasks → Claude Code (local exec)   │
 │                                                │
-│  💾 SQLite Memory (local file, zero config)    │
-│  📦 Auto-deployed Skills                       │
+│  💾 SQLite (Memory + Task Queue, zero config)  │
 └────────────────────────────────────────────────┘
 ```
 
-## 🔧 Development
+</details>
+
+## Development
 
 ```bash
 git clone https://github.com/Kaiyve/feishu-cc-agent.git
-cd feishu-cc-agent
-npm install
+cd feishu-cc-agent && npm install
 npm run dev -- start
 ```
 
-## 📄 License
+## Design Philosophy
+
+> An Agent is not a forwarder. It has memory, judgment, and knows what to handle itself vs. what to delegate.
+> Memory doesn't rely on manual saves — facts are auto-extracted after each turn, old conversations are compressed into summaries, search uses FTS5 not LIKE.
+
+## License
 
 MIT
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Claude Code](https://claude.ai/download) — Anthropic
 - [@larksuiteoapi/node-sdk](https://github.com/larksuite/oapi-sdk-nodejs) — Feishu SDK
-- [OpenClaw](https://github.com/openclaw/openclaw) — Memory architecture inspiration
+- [OpenClaw](https://github.com/openclaw/openclaw) — Memory architecture & API compat reference
