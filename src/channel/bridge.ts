@@ -3,9 +3,16 @@
  *
  * Tasks are persisted to SQLite so they survive process restarts.
  * Each task spawns a fresh `claude -p --bare` process.
+ *
+ * Result delivery: configurable via config.claudeCode.resultDelivery
+ *   - 'private': always DM the admin who triggered (default)
+ *   - 'source':  reply to the chat where task was triggered
  */
 
 import { spawn } from 'child_process';
+import { resolve } from 'path';
+import { homedir } from 'os';
+import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import type { Config } from '../config.js';
 import chalk from 'chalk';
 
@@ -15,17 +22,20 @@ export function getChannelBridge(): ChannelBridge | null {
   return bridge;
 }
 
-// ═══ Task Persistence (SQLite) ═══
+// ═══ Task Persistence (SQLite via dynamic import for ESM compat) ═══
 
 let taskDb: any = null;
+let taskDbReady = false;
 
-function initTaskDb() {
+async function initTaskDb(): Promise<boolean> {
   try {
-    const Database = require('better-sqlite3');
-    const { resolve } = require('path');
-    const { homedir } = require('os');
-    const dbPath = resolve(homedir(), '.feishu-cc-agent', 'memory.db');
-    taskDb = new Database(dbPath);
+    // Dynamic import — works in both ESM and CJS
+    const BetterSqlite3 = (await import('better-sqlite3')).default;
+    const dbDir = resolve(homedir(), '.feishu-cc-agent');
+    if (!existsSync(dbDir)) mkdirSync(dbDir, { recursive: true });
+    const dbPath = resolve(dbDir, 'memory.db');
+
+    taskDb = new BetterSqlite3(dbPath);
     taskDb.exec(`
       CREATE TABLE IF NOT EXISTS cc_tasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,8 +50,14 @@ function initTaskDb() {
     `);
     // Recover any tasks that were running when process died
     taskDb.prepare(`UPDATE cc_tasks SET status = 'pending' WHERE status = 'running'`).run();
-  } catch {
+    taskDbReady = true;
+    return true;
+  } catch (err: any) {
+    console.error(chalk.red(`  ❌ Task DB init failed: ${err.message}`));
+    console.error(chalk.red(`     Claude Code tasks will NOT be persisted.`));
     taskDb = null;
+    taskDbReady = false;
+    return false;
   }
 }
 
@@ -57,12 +73,36 @@ function updateTaskStatus(id: number, status: string, result?: string) {
   if (!taskDb || !id) return;
   taskDb.prepare(
     `UPDATE cc_tasks SET status = ?, result = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-  ).run(status, result?.slice(0, 5000) ?? null, id);
+  ).run(status, result?.slice(0, 50_000) ?? null, id);
 }
 
 function getPendingTasks(): Array<{ id: number; prompt: string; chat_id: string; sender_open_id: string }> {
   if (!taskDb) return [];
   return taskDb.prepare(`SELECT id, prompt, chat_id, sender_open_id FROM cc_tasks WHERE status = 'pending' ORDER BY id ASC`).all();
+}
+
+// ═══ Startup Health Check ═══
+
+async function checkClaudeAvailable(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const child = spawn('claude', ['--version'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    child.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+    child.on('close', (code) => resolve(code === 0 && out.length > 0));
+    child.on('error', () => resolve(false));
+    setTimeout(() => { child.kill(); resolve(false); }, 5000);
+  });
+}
+
+// ═══ Result File Storage ═══
+
+const RESULT_DIR = resolve(homedir(), '.feishu-cc-agent', 'results');
+
+function saveResultToFile(taskId: number, content: string): string {
+  if (!existsSync(RESULT_DIR)) mkdirSync(RESULT_DIR, { recursive: true });
+  const filePath = resolve(RESULT_DIR, `task-${taskId}.txt`);
+  writeFileSync(filePath, content, 'utf-8');
+  return filePath;
 }
 
 // ═══ Bridge ═══
@@ -79,30 +119,68 @@ export class ChannelBridge {
   private processing = false;
   private config: Config;
   private workDir: string;
+  private healthy = false;
 
   constructor(config: Config, workDir: string) {
     this.config = config;
     this.workDir = workDir;
-    initTaskDb();
+  }
 
-    // Process any recovered pending tasks
-    const pending = getPendingTasks();
-    if (pending.length > 0) {
-      console.log(chalk.yellow(`  📋 Recovered ${pending.length} pending CC task(s) from last session`));
-      this.processNext();
+  /**
+   * Async initialization — must be called after constructor.
+   * Returns false if critical checks fail.
+   */
+  async init(): Promise<boolean> {
+    // 1. Check claude CLI is available
+    const claudeOk = await checkClaudeAvailable();
+    if (!claudeOk) {
+      console.error(chalk.red('  ❌ `claude` command not found or not authenticated.'));
+      console.error(chalk.red('     Run `claude` in terminal first to set up.'));
+      return false;
     }
+    console.log(chalk.gray('  ✓ claude CLI available'));
+
+    // 2. Init task DB
+    const dbOk = await initTaskDb();
+    if (!dbOk) {
+      console.error(chalk.yellow('  ⚠️ Task persistence disabled. Tasks will be in-memory only.'));
+    } else {
+      console.log(chalk.gray('  ✓ Task DB ready'));
+    }
+
+    this.healthy = true;
+
+    // 3. Process any recovered pending tasks
+    if (dbOk) {
+      const pending = getPendingTasks();
+      if (pending.length > 0) {
+        console.log(chalk.yellow(`  📋 Recovered ${pending.length} pending task(s)`));
+        this.processNext();
+      }
+    }
+
+    return true;
   }
 
   async submitTask(prompt: string, chatId: string, senderOpenId: string): Promise<any> {
+    if (!this.healthy) {
+      return { error: 'Claude Code Bridge is not healthy. Check startup logs.' };
+    }
+
     const dbId = persistTask(prompt, chatId, senderOpenId);
-    console.log(chalk.yellow(`  📋 CC task #${dbId}: ${prompt.slice(0, 60)}...`));
+    if (dbId === 0 && !taskDb) {
+      // In-memory fallback: queue directly
+      console.log(chalk.yellow(`  📋 CC task (in-memory): ${prompt.slice(0, 60)}...`));
+    } else {
+      console.log(chalk.yellow(`  📋 CC task #${dbId}: ${prompt.slice(0, 60)}...`));
+    }
 
     this.processNext();
 
     return {
       submitted: true,
-      taskId: dbId,
-      message: `Task #${dbId} submitted to Claude Code. Estimated 1-5 minutes.`,
+      taskId: dbId || 'mem',
+      message: `Task #${dbId || 'mem'} submitted to Claude Code. Estimated 1-5 minutes.`,
     };
   }
 
@@ -137,7 +215,6 @@ export class ChannelBridge {
     } finally {
       this.activeTask = null;
       this.processing = false;
-      // Process next task in queue
       const remaining = getPendingTasks();
       if (remaining.length > 0) this.processNext();
     }
@@ -172,11 +249,9 @@ export class ChannelBridge {
 
       child.on('close', (code) => {
         clearTimeout(timer);
-        // Fix #2: Only exit code 0 is success. Non-zero = failure even with output.
         if (code === 0) {
           resolve(output || '(empty output)');
         } else if (output && code !== null) {
-          // Non-zero exit with output: report as failure but include the output
           reject(new Error(`Claude Code exited with code ${code}.\n\nPartial output:\n${output.slice(-1000)}`));
         } else {
           reject(new Error(stderr.slice(-500) || `exit code ${code}`));
@@ -201,12 +276,26 @@ export class ChannelBridge {
 
       const title = status === 'done' ? '✅ Claude Code Done' : '❌ Claude Code Failed';
       const template = status === 'done' ? 'green' : 'red';
-      const text = content.slice(0, 3000);
+
+      // For long results: save to file, send summary to Feishu
+      let text: string;
+      let filePath: string | null = null;
+      if (content.length > 4000) {
+        filePath = saveResultToFile(task.dbId, content);
+        text = content.slice(0, 3500) + `\n\n... (${content.length} chars total)\nFull result: ${filePath}`;
+      } else {
+        text = content;
+      }
+
+      // Determine delivery target
+      const delivery = this.config.claudeCode.resultDelivery || 'private';
+      const receiveIdType = delivery === 'private' ? 'open_id' : 'chat_id';
+      const receiveId = delivery === 'private' ? task.senderOpenId : task.chatId;
 
       await client.im.v1.message.create({
-        params: { receive_id_type: 'chat_id' },
+        params: { receive_id_type: receiveIdType },
         data: {
-          receive_id: task.chatId,
+          receive_id: receiveId,
           msg_type: 'interactive',
           content: JSON.stringify({
             config: { wide_screen_mode: true },
@@ -221,6 +310,11 @@ export class ChannelBridge {
   }
 }
 
-export function startChannelBridge(config: Config, workDir: string) {
+export async function startChannelBridge(config: Config, workDir: string): Promise<boolean> {
   bridge = new ChannelBridge(config, workDir);
+  const ok = await bridge.init();
+  if (!ok) {
+    bridge = null;
+  }
+  return ok;
 }

@@ -27,10 +27,19 @@ export async function startFeishuBot(config: Config, workDir: string, enableChan
   initMemory();
   console.log(chalk.green('✅ 记忆系统已初始化 (SQLite)'));
 
-  // 初始化 Claude Code Channel
+  // 初始化 Claude Code Channel (async with health check)
   if (config.claudeCode.enabled && enableChannel) {
-    startChannelBridge(config, workDir);
-    console.log(chalk.green('✅ Claude Code Channel 已启动'));
+    const ok = await startChannelBridge(config, workDir);
+    if (ok) {
+      console.log(chalk.green('✅ Claude Code Channel 已启动'));
+      if (config.claudeCode.skipPermissions) {
+        console.log(chalk.yellow('  ⚠️  skipPermissions=true — Claude Code runs without safety prompts'));
+      }
+      console.log(chalk.gray(`  结果发送: ${config.claudeCode.resultDelivery === 'source' ? '发到触发聊天' : '私发管理员'}`));
+    } else {
+      console.log(chalk.red('❌ Claude Code Channel 启动失败（检查上方错误）'));
+      console.log(chalk.gray('  Agent 仍可正常工作，但无法委派 Claude Code 任务'));
+    }
   }
 
   // 创建飞书客户端

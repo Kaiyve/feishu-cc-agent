@@ -23,7 +23,8 @@ export interface Config {
   };
   claudeCode: {
     enabled: boolean;
-    skipPermissions: boolean;  // --dangerously-skip-permissions
+    skipPermissions: boolean;  // --dangerously-skip-permissions (⚠️ bypasses ALL safety prompts)
+    resultDelivery: 'private' | 'source';  // 'private' = DM admin, 'source' = reply to trigger chat
   };
 }
 
@@ -40,7 +41,7 @@ export const DEFAULT_CONFIG: Config = {
     timeoutMs: 120_000,
   },
   permissions: { adminOpenIds: [] },
-  claudeCode: { enabled: true, skipPermissions: true },
+  claudeCode: { enabled: true, skipPermissions: true, resultDelivery: 'private' },
 };
 
 /**

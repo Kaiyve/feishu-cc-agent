@@ -96,8 +96,19 @@ export async function init() {
     {
       type: 'confirm',
       name: 'skipPermissions',
-      message: '跳过权限确认（--dangerously-skip-permissions）?',
+      message: '⚠️  跳过权限确认（bypass 模式，Claude Code 将无需人工审批）?',
       default: existing.claudeCode.skipPermissions,
+      when: (a: any) => a.enabled,
+    },
+    {
+      type: 'list',
+      name: 'resultDelivery',
+      message: 'Claude Code 执行结果发送方式:',
+      choices: [
+        { name: '私发给触发者（推荐，防止群里泄露代码）', value: 'private' },
+        { name: '发到触发的聊天（群聊则群发）', value: 'source' },
+      ],
+      default: existing.claudeCode.resultDelivery || 'private',
       when: (a: any) => a.enabled,
     },
   ]);
@@ -132,6 +143,7 @@ export async function init() {
     claudeCode: {
       enabled: cc.enabled ?? true,
       skipPermissions: cc.skipPermissions ?? true,
+      resultDelivery: cc.resultDelivery ?? 'private',
     },
   };
 
