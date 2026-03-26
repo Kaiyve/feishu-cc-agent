@@ -1,7 +1,7 @@
 /**
- * AI Agent API — 任意 OpenAI 兼容端点
+ * AI Agent API — Any OpenAI-compatible endpoint
  *
- * 支持: 智谱、DeepSeek、LiteLLM、OpenRouter、OpenAI 等
+ * Supports: ZhiPu, DeepSeek, LiteLLM, OpenRouter, OpenAI, etc.
  */
 
 export interface AgentMessage {
@@ -29,6 +29,9 @@ export interface AgentResponse {
   stopReason: 'end_turn' | 'tool_use' | 'max_tokens';
 }
 
+/**
+ * Full agent call with tool support.
+ */
 export async function callAgent(params: {
   baseUrl: string;
   apiKey: string;
@@ -55,10 +58,7 @@ export async function callAgent(params: {
     }));
   }
 
-  // 确保 baseUrl 以 /chat/completions 结尾
-  const url = baseUrl.endsWith('/chat/completions')
-    ? baseUrl
-    : `${baseUrl.replace(/\/$/, '')}/chat/completions`;
+  const url = buildUrl(baseUrl);
 
   const res = await fetch(url, {
     method: 'POST',
@@ -94,4 +94,51 @@ export async function callAgent(params: {
     stopReason: choice?.finish_reason === 'tool_calls' ? 'tool_use'
       : choice?.finish_reason === 'length' ? 'max_tokens' : 'end_turn',
   };
+}
+
+/**
+ * Lightweight LLM call — no tools, low max_tokens, short timeout.
+ * Used for memory extraction and conversation summarization.
+ */
+export async function callLightweight(params: {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  system: string;
+  message: string;
+}): Promise<string> {
+  const { baseUrl, apiKey, model, system, message } = params;
+
+  const url = buildUrl(baseUrl);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: message },
+      ],
+      max_tokens: 512,
+      temperature: 0.3,
+    }),
+    signal: AbortSignal.timeout(15_000), // Short timeout for background tasks
+  });
+
+  if (!res.ok) {
+    throw new Error(`AI API ${res.status}`);
+  }
+
+  const data = await res.json() as any;
+  return data.choices?.[0]?.message?.content ?? '';
+}
+
+function buildUrl(baseUrl: string): string {
+  return baseUrl.endsWith('/chat/completions')
+    ? baseUrl
+    : `${baseUrl.replace(/\/$/, '')}/chat/completions`;
 }
