@@ -15,15 +15,18 @@
 | 能力 | 说明 |
 |------|------|
 | 智能路由 | 简单问题 Agent 直答，复杂任务自动委派 Claude Code |
-| 本地执行 | 飞书发消息 → Mac 上的 Claude Code 干活 → 结果推回飞书 |
+| 本地执行 | 飞书发消息 → Mac 上的 Claude Code 干活 → 结果私发管理员 |
 | 跨会话记忆 | FTS5 全文搜索 + 自动提取事实 + 历史对话压缩，不是一次性聊天 |
 | 任意 AI 提供商 | 智谱 / DeepSeek / OpenRouter / Ollama / OpenAI，自动适配 tool calling 差异 |
 | 任务持久化 | Claude Code 任务队列存 SQLite，进程重启自动恢复 |
-| 权限分级 | 管理员可执行 Claude Code、写全局记忆；普通用户仅对话 |
+| 自动环境检测 | 启动时检测 Claude Code，未安装则自动 `npm install -g`，未认证则提示登录 |
+| 权限 + 隔离 | 管理员才能触发 Claude Code；执行结果默认私发，不在群里广播 |
 
 ## 安装
 
-**前提**：Node.js ≥ 20，[Claude Code](https://claude.ai/download) 已安装，飞书开放平台应用（[配置指南](#飞书应用配置)）
+**前提**：Node.js ≥ 20，飞书开放平台应用（[配置指南](#飞书应用配置)）
+
+Claude Code 不需要提前装——`init` 向导会自动检测并安装。
 
 ```bash
 npm install -g feishu-cc-agent
@@ -32,8 +35,8 @@ npm install -g feishu-cc-agent
 ## 配置 → 启动
 
 ```bash
-feishu-cc-agent init    # 交互式向导：飞书 App → AI API → Claude Code → 管理员
-feishu-cc-agent start   # 启动，去飞书发消息试试
+feishu-cc-agent init    # 交互式向导：飞书 App → AI API → Claude Code（自动安装） → 管理员
+feishu-cc-agent start   # 启动前自动检测环境，未就绪则降级为 Agent-only 模式
 ```
 
 ## 使用
@@ -43,7 +46,7 @@ feishu-cc-agent start   # 启动，去飞书发消息试试
 - "帮我解释一下 React hooks" → Agent 直接回答
 - "帮我改一下登录页的样式" → 委派给 Claude Code
 - "记住我喜欢用 TypeScript" → 保存到本地记忆
-- "帮我跑一下测试" → Claude Code 执行，结果推回飞书
+- "帮我跑一下测试" → Claude Code 执行，结果私发给你
 
 ## AI 提供商
 
@@ -79,9 +82,15 @@ feishu-cc-agent start   # 启动，去飞书发消息试试
     "timeoutMs": 120000
   },
   "permissions": { "adminOpenIds": ["ou_xxx"] },
-  "claudeCode": { "enabled": true, "skipPermissions": true }
+  "claudeCode": {
+    "enabled": true,
+    "skipPermissions": true,
+    "resultDelivery": "private"
+  }
 }
 ```
+
+`resultDelivery`：`"private"` 私发管理员（默认），`"source"` 发到触发的聊天
 
 </details>
 
@@ -117,6 +126,7 @@ npm run dev -- start
 
 > Agent 不是转发器。它有记忆、有判断、知道什么自己能做、什么该交给 Claude Code。
 > 记忆不靠用户手动保存——每轮对话自动提取事实，老对话自动压缩成摘要，搜索用 FTS5 不用 LIKE。
+> 用户生成的记忆内容在 system prompt 中标记为不可信数据，防止 prompt injection。
 
 ## License
 
@@ -149,15 +159,18 @@ Feishu can send messages, but lacks AI reasoning and local execution. This proje
 | Capability | Description |
 |-----------|-------------|
 | Smart Routing | Simple questions answered by Agent, complex tasks auto-delegated to Claude Code |
-| Local Execution | Send message on Feishu → Claude Code works on your Mac → result pushed back |
+| Local Execution | Send message on Feishu → Claude Code works on your Mac → result DM'd to admin |
 | Cross-session Memory | FTS5 full-text search + auto fact extraction + conversation compression |
 | Any AI Provider | ZhiPu / DeepSeek / OpenRouter / Ollama / OpenAI, auto-adapts tool calling differences |
 | Task Persistence | Claude Code task queue in SQLite, auto-recovers on restart |
-| Permission Control | Admins can run Claude Code + write global memories; regular users chat only |
+| Auto Environment Setup | Detects Claude Code on startup, auto-installs if missing, prompts login if needed |
+| Permission + Isolation | Only admins can trigger Claude Code; results DM'd privately by default |
 
 ## Install
 
-**Prerequisites**: Node.js ≥ 20, [Claude Code](https://claude.ai/download) installed, Feishu app ([Setup Guide](#feishu-app-setup))
+**Prerequisites**: Node.js ≥ 20, Feishu app ([Setup Guide](#feishu-app-setup))
+
+Claude Code doesn't need to be pre-installed — the `init` wizard auto-detects and installs it.
 
 ```bash
 npm install -g feishu-cc-agent
@@ -166,8 +179,8 @@ npm install -g feishu-cc-agent
 ## Configure → Start
 
 ```bash
-feishu-cc-agent init    # Interactive wizard: Feishu App → AI API → Claude Code → Admin
-feishu-cc-agent start   # Start, then message your bot on Feishu
+feishu-cc-agent init    # Interactive wizard: Feishu App → AI API → Claude Code (auto-install) → Admin
+feishu-cc-agent start   # Auto-checks environment before launch, degrades to Agent-only if CC not ready
 ```
 
 ## Usage
@@ -177,7 +190,7 @@ Just message your bot on Feishu. The Agent decides how to handle it:
 - "Explain React hooks" → Agent answers directly
 - "Fix the login page styles" → Delegates to Claude Code
 - "Remember I prefer TypeScript" → Saves to local memory
-- "Run the tests" → Claude Code executes, result pushed back to Feishu
+- "Run the tests" → Claude Code executes, result DM'd to you
 
 ## AI Providers
 
@@ -213,9 +226,15 @@ Any OpenAI-compatible endpoint works. Models without tool calling auto-fallback 
     "timeoutMs": 120000
   },
   "permissions": { "adminOpenIds": ["ou_xxx"] },
-  "claudeCode": { "enabled": true, "skipPermissions": true }
+  "claudeCode": {
+    "enabled": true,
+    "skipPermissions": true,
+    "resultDelivery": "private"
+  }
 }
 ```
+
+`resultDelivery`: `"private"` DM to admin (default), `"source"` reply to trigger chat
 
 </details>
 
@@ -251,6 +270,7 @@ npm run dev -- start
 
 > An Agent is not a forwarder. It has memory, judgment, and knows what to handle itself vs. what to delegate.
 > Memory doesn't rely on manual saves — facts are auto-extracted after each turn, old conversations are compressed into summaries, search uses FTS5 not LIKE.
+> User-generated memory content is marked as untrusted data in the system prompt to prevent prompt injection.
 
 ## License
 
