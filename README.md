@@ -4,6 +4,8 @@
 
 > 在飞书上发消息，AI Agent 理解你的意图，简单问题直接回答，复杂任务自动交给本地 Mac 上的 Claude Code 执行。
 
+[English](#english) | 中文
+
 ## ✨ 特性
 
 - **飞书原生** — WebSocket 长连接，支持群聊和私聊
@@ -113,30 +115,18 @@ feishu-cc-agent start
 
 ```
 ┌────────────────────────────────────────────────┐
-│            feishu-cc-agent (本地 Mac)           │
+│            feishu-cc-agent (Local Mac)          │
 │                                                │
-│  📱 飞书 WebSocket ← @larksuiteoapi/node-sdk   │
+│  📱 Feishu WebSocket ← @larksuiteoapi/node-sdk │
 │       ↓                                        │
-│  🧠 Agent (任意 OpenAI 兼容 API)                │
-│       ↓ 智能路由                                │
-│  ┌─ 简单问题 → Agent 直接回答                   │
-│  └─ 复杂任务 → Claude Code (本地执行)           │
+│  🧠 Agent (Any OpenAI-compatible API)          │
+│       ↓ Smart routing                          │
+│  ┌─ Simple questions → Agent answers directly  │
+│  └─ Complex tasks → Claude Code (local exec)   │
 │                                                │
-│  💾 SQLite 记忆（本地文件，零配置）              │
+│  💾 SQLite Memory (local file, zero config)    │
 │  📦 Auto-deployed Skills                       │
 └────────────────────────────────────────────────┘
-```
-
-## 📁 文件结构
-
-```
-~/.feishu-cc-agent/
-  ├── config.json    # 配置文件
-  └── memory.db      # SQLite 记忆数据库
-
-~/.claude/skills/
-  └── feishu-agent/  # 自动部署的 Claude Code Skill
-      └── SKILL.md
 ```
 
 ## 🔧 开发
@@ -155,5 +145,157 @@ MIT
 ## 🙏 致谢
 
 - [Claude Code](https://claude.ai/download) — Anthropic
-- [@larksuiteoapi/node-sdk](https://github.com/larksuite/oapi-sdk-nodejs) — 飞书 SDK
-- [cc-connect](https://github.com/chenhg5/cc-connect) — 灵感来源
+- [@larksuiteoapi/node-sdk](https://github.com/larksuite/oapi-sdk-nodejs) — Feishu SDK
+- [cc-connect](https://github.com/chenhg5/cc-connect) — Inspiration
+
+---
+
+<a id="english"></a>
+
+# feishu-cc-agent
+
+The most powerful general-purpose Agent, right on your phone via Feishu
+
+> Send a message on Feishu, AI Agent understands your intent, answers simple questions directly, and automatically delegates complex tasks to Claude Code running on your local Mac.
+
+## ✨ Features
+
+- **Feishu Native** — WebSocket long connection, supports group and private chats
+- **Smart Agent** — Not a simple forwarder; understands intent and routes intelligently
+- **Claude Code Integration** — Complex tasks auto-delegated to your local Mac
+- **Any AI Provider** — Supports ZhiPu, DeepSeek, OpenRouter, LiteLLM, and more
+- **Local Memory** — SQLite storage, zero servers, zero configuration
+- **Auto-deploy Skills** — Automatically configures Claude Code skills on install
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js ≥ 20
+- [Claude Code](https://claude.ai/download) installed (for local execution)
+- A Feishu Open Platform app ([Setup Guide](#-feishu-app-setup))
+- Any OpenAI-compatible AI API Key
+
+### Install
+
+```bash
+npm install -g feishu-cc-agent
+```
+
+### Configure
+
+```bash
+feishu-cc-agent init
+```
+
+The interactive wizard will guide you through:
+1. 📱 Feishu App ID / Secret
+2. 🧠 AI API (choose from presets or custom)
+3. 💻 Claude Code (enable local execution or not)
+4. 🔐 Admin open_id
+
+### Start
+
+```bash
+feishu-cc-agent start
+```
+
+That's it! Go send a message to your bot on Feishu.
+
+## 💬 Usage Examples
+
+| You say | Agent does |
+|---------|-----------|
+| "Explain React hooks to me" | Agent answers directly |
+| "Help me fix the login page" | Delegates to Claude Code |
+| "Continue the frontend task from last time" | Claude Code searches history and resumes |
+| "Remember that I prefer TypeScript" | Saves to local memory |
+
+## 🤖 Supported AI Providers
+
+| Provider | Base URL | Recommended Model |
+|----------|----------|-------------------|
+| ZhiPu | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-plus` |
+| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| OpenRouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4` |
+| LiteLLM | Custom | Custom |
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o` |
+
+Any OpenAI-compatible `/chat/completions` endpoint is supported.
+
+## 📱 Feishu App Setup
+
+1. Log in to [Feishu Open Platform](https://open.feishu.cn)
+2. Create an internal enterprise app
+3. Add **Bot** capability
+4. Permissions → Enable:
+   - `im:message` (read & send messages)
+   - `im:message:send_as_bot` (send messages as bot)
+5. Events & Callbacks → Subscription method: **Long connection**
+6. Add event: `im.message.receive_v1`
+7. Version Management → Create version → Publish
+
+## ⚙️ Configuration
+
+Config is stored at `~/.feishu-cc-agent/config.json`:
+
+```json
+{
+  "feishu": {
+    "appId": "cli_xxx",
+    "appSecret": "xxx"
+  },
+  "agent": {
+    "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+    "apiKey": "xxx",
+    "model": "glm-4-plus",
+    "maxTurns": 10,
+    "timeoutMs": 120000
+  },
+  "permissions": {
+    "adminOpenIds": ["ou_xxx"]
+  },
+  "claudeCode": {
+    "enabled": true,
+    "skipPermissions": true,
+    "resumeSession": true
+  }
+}
+```
+
+## 🏗️ Architecture
+
+```
+┌────────────────────────────────────────────────┐
+│            feishu-cc-agent (Local Mac)          │
+│                                                │
+│  📱 Feishu WebSocket ← @larksuiteoapi/node-sdk │
+│       ↓                                        │
+│  🧠 Agent (Any OpenAI-compatible API)          │
+│       ↓ Smart routing                          │
+│  ┌─ Simple questions → Agent answers directly  │
+│  └─ Complex tasks → Claude Code (local exec)   │
+│                                                │
+│  💾 SQLite Memory (local file, zero config)    │
+│  📦 Auto-deployed Skills                       │
+└────────────────────────────────────────────────┘
+```
+
+## 🔧 Development
+
+```bash
+git clone https://github.com/Kaiyve/feishu-cc-agent.git
+cd feishu-cc-agent
+npm install
+npm run dev -- start
+```
+
+## 📄 License
+
+MIT
+
+## 🙏 Acknowledgments
+
+- [Claude Code](https://claude.ai/download) — Anthropic
+- [@larksuiteoapi/node-sdk](https://github.com/larksuite/oapi-sdk-nodejs) — Feishu SDK
+- [cc-connect](https://github.com/chenhg5/cc-connect) — Inspiration
