@@ -1,15 +1,16 @@
 /**
- * feishu-cc-agent start — 启动所有服务
+ * feishu-cc-agent start — start all services
  *
- * 单进程运行:
- *   1. 飞书 WebSocket 长连接（接收消息）
- *   2. AI Agent（理解意图 + 工具调用）
- *   3. Claude Code Channel MCP（可选，本地执行）
+ * Single process:
+ *   1. Feishu WebSocket (receive messages)
+ *   2. AI Agent (intent + tool calls)
+ *   3. Claude Code Bridge (optional, local execution)
  */
 
 import chalk from 'chalk';
 import { loadConfig, isConfigured } from '../config.js';
 import { startFeishuBot } from '../feishu/bot.js';
+import { ensureClaude } from '../claude-check.js';
 import { resolve } from 'path';
 
 interface StartOptions {
@@ -29,11 +30,23 @@ export async function start(options: StartOptions) {
   console.log(chalk.bold('\n═══ feishu-cc-agent ═══'));
   console.log(`📱 飞书 App: ${config.feishu.appId}`);
   console.log(`🧠 AI Model: ${config.agent.model}`);
-  console.log(`💻 Claude Code: ${config.claudeCode.enabled && options.channel ? '启用' : '关闭'}`);
   console.log(`📁 工作目录: ${workDir}`);
   console.log(`👑 管理员: ${config.permissions.adminOpenIds.length} 人`);
+
+  // Claude Code pre-flight check
+  let enableCC = config.claudeCode.enabled && options.channel;
+  if (enableCC) {
+    const ready = await ensureClaude(false);
+    if (!ready) {
+      console.log(chalk.yellow('\n⚠️  Claude Code 未就绪，将以 Agent-only 模式启动。'));
+      console.log(chalk.gray('  Agent 正常工作，但无法委派本地执行任务。\n'));
+      enableCC = false;
+    }
+  }
+
+  console.log(`💻 Claude Code: ${enableCC ? chalk.green('启用') : chalk.gray('关闭')}`);
   console.log('');
 
-  // 启动飞书 Bot（包含 Agent + Channel）
-  await startFeishuBot(config, workDir, options.channel);
+  // Start Feishu Bot (includes Agent + Channel)
+  await startFeishuBot(config, workDir, enableCC);
 }

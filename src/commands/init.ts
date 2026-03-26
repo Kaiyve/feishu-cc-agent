@@ -11,6 +11,7 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import { loadConfig, saveConfig, CONFIG_FILE, type Config } from '../config.js';
 import { deploySkills } from '../skills/deploy.js';
+import { ensureClaude } from '../claude-check.js';
 
 export async function init() {
   console.log(chalk.bold('\n🚀 feishu-cc-agent 配置向导\n'));
@@ -112,6 +113,15 @@ export async function init() {
       when: (a: any) => a.enabled,
     },
   ]);
+
+  // Check Claude Code if enabled
+  if (cc.enabled) {
+    const ready = await ensureClaude(true);
+    if (!ready) {
+      console.log(chalk.yellow('\n  Claude Code 未就绪，你可以稍后手动安装并认证。'));
+      console.log(chalk.gray('  启动时会再次检测。\n'));
+    }
+  }
 
   // ═══ Step 4: 管理员 ═══
   console.log(chalk.cyan('\n🔐 Step 4/4: 管理员配置'));

@@ -81,19 +81,6 @@ function getPendingTasks(): Array<{ id: number; prompt: string; chat_id: string;
   return taskDb.prepare(`SELECT id, prompt, chat_id, sender_open_id FROM cc_tasks WHERE status = 'pending' ORDER BY id ASC`).all();
 }
 
-// ═══ Startup Health Check ═══
-
-async function checkClaudeAvailable(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const child = spawn('claude', ['--version'], { stdio: ['ignore', 'pipe', 'pipe'] });
-    let out = '';
-    child.stdout.on('data', (d: Buffer) => { out += d.toString(); });
-    child.on('close', (code) => resolve(code === 0 && out.length > 0));
-    child.on('error', () => resolve(false));
-    setTimeout(() => { child.kill(); resolve(false); }, 5000);
-  });
-}
-
 // ═══ Result File Storage ═══
 
 const RESULT_DIR = resolve(homedir(), '.feishu-cc-agent', 'results');
@@ -128,19 +115,10 @@ export class ChannelBridge {
 
   /**
    * Async initialization — must be called after constructor.
-   * Returns false if critical checks fail.
+   * Claude CLI availability is checked by start.ts before this is called.
    */
   async init(): Promise<boolean> {
-    // 1. Check claude CLI is available
-    const claudeOk = await checkClaudeAvailable();
-    if (!claudeOk) {
-      console.error(chalk.red('  ❌ `claude` command not found or not authenticated.'));
-      console.error(chalk.red('     Run `claude` in terminal first to set up.'));
-      return false;
-    }
-    console.log(chalk.gray('  ✓ claude CLI available'));
-
-    // 2. Init task DB
+    // Init task DB
     const dbOk = await initTaskDb();
     if (!dbOk) {
       console.error(chalk.yellow('  ⚠️ Task persistence disabled. Tasks will be in-memory only.'));
@@ -150,7 +128,7 @@ export class ChannelBridge {
 
     this.healthy = true;
 
-    // 3. Process any recovered pending tasks
+    // Process any recovered pending tasks
     if (dbOk) {
       const pending = getPendingTasks();
       if (pending.length > 0) {
