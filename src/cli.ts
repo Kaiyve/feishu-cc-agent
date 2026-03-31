@@ -34,7 +34,6 @@ program
   .command('start')
   .description('启动服务')
   .option('-d, --dir <path>', '工作目录（Claude Code 在此目录下运行）', '.')
-  .option('--no-channel', '不启动 Claude Code Channel（仅 Agent）')
   .action(start);
 
 program.parse();

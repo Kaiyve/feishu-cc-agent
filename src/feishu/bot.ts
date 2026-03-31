@@ -25,20 +25,18 @@ const EMOJIS = ['ROCKET', 'LIGHTNING', 'SPARKLES', 'RAINBOW', 'FIRE', 'COOL', 'P
 export async function startFeishuBot(config: Config, workDir: string, enableChannel: boolean) {
   // 初始化记忆
   initMemory();
-  console.log(chalk.green('✅ 记忆系统已初始化 (SQLite)'));
+  console.log(chalk.green('✅ Memory system initialized (SQLite)'));
 
-  // 初始化 Claude Code Channel (async with health check)
+  // 初始化 Claude Code task queue (SQLite polling, no spawn)
   if (config.claudeCode.enabled && enableChannel) {
-    const ok = await startChannelBridge(config, workDir);
+    const ok = await startChannelBridge(config);
     if (ok) {
-      console.log(chalk.green('✅ Claude Code Channel 已启动'));
-      if (config.claudeCode.skipPermissions) {
-        console.log(chalk.yellow('  ⚠️  skipPermissions=true — Claude Code runs without safety prompts'));
-      }
-      console.log(chalk.gray(`  结果发送: ${config.claudeCode.resultDelivery === 'source' ? '发到触发聊天' : '私发管理员'}`));
+      console.log(chalk.green('✅ Claude Code task queue ready'));
+      console.log(chalk.gray(`  Result delivery: ${config.claudeCode.resultDelivery === 'source' ? 'reply to trigger chat' : 'DM admin'}`));
+      console.log(chalk.gray(`  Task timeout: ${config.claudeCode.taskTimeoutMin || 60} min`));
     } else {
-      console.log(chalk.red('❌ Claude Code Channel 启动失败（检查上方错误）'));
-      console.log(chalk.gray('  Agent 仍可正常工作，但无法委派 Claude Code 任务'));
+      console.log(chalk.red('❌ Task queue init failed (check errors above)'));
+      console.log(chalk.gray('  Agent still works, but cannot delegate to Claude Code'));
     }
   }
 

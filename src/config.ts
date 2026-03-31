@@ -25,6 +25,7 @@ export interface Config {
     enabled: boolean;
     skipPermissions: boolean;  // --dangerously-skip-permissions (⚠️ bypasses ALL safety prompts)
     resultDelivery: 'private' | 'source';  // 'private' = DM admin, 'source' = reply to trigger chat
+    taskTimeoutMin: number;   // task timeout in minutes (default 60)
   };
 }
 
@@ -41,7 +42,7 @@ export const DEFAULT_CONFIG: Config = {
     timeoutMs: 120_000,
   },
   permissions: { adminOpenIds: [] },
-  claudeCode: { enabled: true, skipPermissions: true, resultDelivery: 'private' },
+  claudeCode: { enabled: true, skipPermissions: true, resultDelivery: 'private', taskTimeoutMin: 60 },
 };
 
 /**

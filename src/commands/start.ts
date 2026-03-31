@@ -1,26 +1,25 @@
 /**
  * feishu-cc-agent start — start all services
  *
- * Single process:
- *   1. Feishu WebSocket (receive messages)
- *   2. AI Agent (intent + tool calls)
- *   3. Claude Code Bridge (optional, local execution)
+ * Two processes:
+ *   1. This process: Feishu WebSocket + AI Agent + SQLite task queue
+ *   2. Claude Code (user starts separately): reads tasks via MCP Channel Server
  */
 
 import chalk from 'chalk';
 import { loadConfig, isConfigured } from '../config.js';
 import { startFeishuBot } from '../feishu/bot.js';
-import { ensureClaude } from '../claude-check.js';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
+import { writeFileSync } from 'fs';
+import { fileURLToPath } from 'url';
 
 interface StartOptions {
   dir: string;
-  channel: boolean;
 }
 
 export async function start(options: StartOptions) {
   if (!isConfigured()) {
-    console.log(chalk.red('❌ 尚未配置。请先运行: feishu-cc-agent init'));
+    console.log(chalk.red('❌ Not configured. Run: feishu-cc-agent init'));
     process.exit(1);
   }
 
@@ -28,25 +27,46 @@ export async function start(options: StartOptions) {
   const workDir = resolve(options.dir);
 
   console.log(chalk.bold('\n═══ feishu-cc-agent ═══'));
-  console.log(`📱 飞书 App: ${config.feishu.appId}`);
+  console.log(`📱 Feishu App: ${config.feishu.appId}`);
   console.log(`🧠 AI Model: ${config.agent.model}`);
-  console.log(`📁 工作目录: ${workDir}`);
-  console.log(`👑 管理员: ${config.permissions.adminOpenIds.length} 人`);
+  console.log(`📁 Work Dir: ${workDir}`);
+  console.log(`👑 Admins: ${config.permissions.adminOpenIds.length}`);
 
-  // Claude Code pre-flight check
-  let enableCC = config.claudeCode.enabled && options.channel;
+  const enableCC = config.claudeCode.enabled;
+  console.log(`💻 Claude Code: ${enableCC ? chalk.green('enabled') : chalk.gray('disabled')}`);
+
+  // Generate .mcp.json in workDir for Claude Code to discover the channel server
   if (enableCC) {
-    const ready = await ensureClaude(false);
-    if (!ready) {
-      console.log(chalk.yellow('\n⚠️  Claude Code 未就绪，将以 Agent-only 模式启动。'));
-      console.log(chalk.gray('  Agent 正常工作，但无法委派本地执行任务。\n'));
-      enableCC = false;
-    }
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const serverJsPath = resolve(__dirname, '../channel/server.js');
+
+    const mcpConfig = {
+      mcpServers: {
+        'feishu-agent': {
+          command: 'node',
+          args: [serverJsPath],
+        },
+      },
+    };
+
+    const mcpJsonPath = resolve(workDir, '.mcp.json');
+    writeFileSync(mcpJsonPath, JSON.stringify(mcpConfig, null, 2));
+    console.log(chalk.gray(`  ✓ Generated ${mcpJsonPath}`));
   }
 
-  console.log(`💻 Claude Code: ${enableCC ? chalk.green('启用') : chalk.gray('关闭')}`);
   console.log('');
 
-  // Start Feishu Bot (includes Agent + Channel)
+  // Start Feishu Bot (includes Agent + Task Queue)
   await startFeishuBot(config, workDir, enableCC);
+
+  // Print Claude Code startup instructions
+  if (enableCC) {
+    const skipFlag = config.claudeCode.skipPermissions ? ' --dangerously-skip-permissions' : '';
+    console.log(chalk.cyan('\n═══ Start Claude Code in another terminal ═══'));
+    console.log(chalk.yellow(`  cd ${workDir}`));
+    console.log(chalk.yellow(`  claude${skipFlag} --dangerously-load-development-channels server:feishu-agent`));
+    console.log(chalk.gray('\n  Tip: use tmux — tmux new -s cc'));
+    console.log(chalk.gray(`  Task timeout: ${config.claudeCode.taskTimeoutMin || 60} min`));
+    console.log('');
+  }
 }

@@ -34,6 +34,8 @@ The following requests MUST call the delegate_to_claude_code tool:
 - "Help me run/execute a command"
 - Any operation involving local files, Git, or Shell
 
+When delegating, write a detailed prompt with all context. **Always end the prompt with "ultrathink" on its own line** to enable deep reasoning.
+
 ## Security Rules
 - Never execute dangerous operations (e.g. deleting system files)
 - Never expose API Keys or other sensitive information

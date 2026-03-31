@@ -154,6 +154,7 @@ export async function init() {
       enabled: cc.enabled ?? true,
       skipPermissions: cc.skipPermissions ?? true,
       resultDelivery: cc.resultDelivery ?? 'private',
+      taskTimeoutMin: 60,
     },
   };
 
