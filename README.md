@@ -52,12 +52,89 @@ feishu-cc-agent start   # 启动前自动检测环境，未就绪则降级为 Ag
 
 | 提供商 | Base URL | 推荐模型 |
 |-------|----------|---------|
+| LiteLLM (自托管代理) | `https://your-litellm.example.com` | `anthropic.claude-sonnet-4` |
 | 智谱 | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-plus` |
 | DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
 | OpenRouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4` |
 | OpenAI | `https://api.openai.com/v1` | `gpt-4o` |
 
 任何 OpenAI 兼容端点都支持。不支持 tool calling 的模型会自动降级为文本模式。
+
+<details>
+<summary>💡 推荐：用 LiteLLM 做 Agent 的 AI 后端</summary>
+
+**为什么用 LiteLLM？**
+
+LiteLLM 是一个 OpenAI 兼容的 API 代理，一个端点统一调用 100+ 模型（Claude、GPT、Gemini、DeepSeek 等）。好处：
+- **中国用户**：部署在海外服务器，绕过 Anthropic API 的中国 IP 封禁
+- **统一 Key 管理**：一个 API Key 访问所有模型，不用每个提供商单独管理
+- **负载均衡 + 降级**：主模型挂了自动切到备用模型
+- **用量追踪**：按 Key、模型、用户统计 token 消耗
+
+**快速部署 LiteLLM**
+
+```bash
+# 1. 在海外服务器（AWS/GCP/阿里云海外区）
+pip install litellm[proxy]
+
+# 2. 创建配置 config.yaml
+cat > config.yaml << 'EOF'
+model_list:
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: sk-ant-xxx  # 你的 Anthropic API Key
+
+  - model_name: deepseek
+    litellm_params:
+      model: deepseek/deepseek-chat
+      api_key: sk-xxx
+
+general_settings:
+  master_key: sk-your-litellm-master-key  # 自定义 master key
+EOF
+
+# 3. 启动
+litellm --config config.yaml --port 4000
+
+# 4. 生产环境用 Docker
+docker run -d --name litellm \
+  -v $(pwd)/config.yaml:/app/config.yaml \
+  -p 4000:4000 \
+  ghcr.io/berriai/litellm:main-latest \
+  --config /app/config.yaml
+```
+
+**在 feishu-cc-agent 中配置**
+
+```bash
+feishu-cc-agent init
+# AI Provider → 选 Custom
+# Base URL:  https://your-server:4000    （你的 LiteLLM 地址）
+# API Key:   sk-your-litellm-master-key  （config.yaml 中的 master_key）
+# Model:     claude-sonnet               （config.yaml 中的 model_name）
+```
+
+或直接编辑 `~/.feishu-cc-agent/config.json`：
+
+```json
+{
+  "agent": {
+    "baseUrl": "https://your-server:4000",
+    "apiKey": "sk-your-litellm-master-key",
+    "model": "claude-sonnet"
+  }
+}
+```
+
+**模型命名**
+
+LiteLLM 的模型名取决于你在 `config.yaml` 中的 `model_name`。常见格式：
+- 自定义别名：`claude-sonnet`（推荐，简洁）
+- LiteLLM 原生格式：`anthropic/claude-sonnet-4-20250514`
+- 第三方转发：`anthropic.novita.claude-sonnet-4`（通过 Novita AI 转发）
+
+</details>
 
 ## 飞书应用配置
 
@@ -196,12 +273,57 @@ Just message your bot on Feishu. The Agent decides how to handle it:
 
 | Provider | Base URL | Recommended Model |
 |----------|----------|-------------------|
+| LiteLLM (self-hosted proxy) | `https://your-litellm.example.com` | `anthropic.claude-sonnet-4` |
 | ZhiPu | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-plus` |
 | DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
 | OpenRouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4` |
 | OpenAI | `https://api.openai.com/v1` | `gpt-4o` |
 
 Any OpenAI-compatible endpoint works. Models without tool calling auto-fallback to text mode.
+
+<details>
+<summary>💡 Recommended: LiteLLM as Agent AI backend</summary>
+
+[LiteLLM](https://github.com/BerriAI/litellm) is an OpenAI-compatible proxy — one endpoint to call 100+ models (Claude, GPT, Gemini, DeepSeek, etc.).
+
+**Why LiteLLM?**
+- **China users**: Deploy on overseas server to bypass Anthropic's China IP block
+- **Unified keys**: One API key for all providers
+- **Load balancing + fallback**: Auto-switch to backup model if primary is down
+- **Usage tracking**: Per-key, per-model token usage stats
+
+**Quick deploy:**
+
+```bash
+pip install litellm[proxy]
+
+# config.yaml
+model_list:
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: sk-ant-xxx
+
+general_settings:
+  master_key: sk-your-master-key
+
+# Start
+litellm --config config.yaml --port 4000
+```
+
+**Configure in feishu-cc-agent:**
+
+```json
+{
+  "agent": {
+    "baseUrl": "https://your-server:4000",
+    "apiKey": "sk-your-master-key",
+    "model": "claude-sonnet"
+  }
+}
+```
+
+</details>
 
 ## Feishu App Setup
 
